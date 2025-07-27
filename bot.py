@@ -51,14 +51,39 @@ class AutoStaking:
                 ]
             }
         ]
-        self.PROMPT = (
-            "1. Mandatory Requirement: The product's TVL must be higher than one million USD.\n"
-            "2. Balance Preference: Prioritize products that have a good balance of high current APY and high TVL.\n"
-            "3. Portfolio Allocation: Select the 3 products with the best combined ranking in terms of current APY and TVL among those with TVL > 1,000,000 USD. "
-            "To determine the combined ranking, rank all eligible products by current APY (highest to lowest) and by TVL (highest to lowest), "
-            "then sum the two ranks for each product. Choose the 3 products with the smallest sum of ranks. Allocate the investment equally among these 3 products, "
-            "with each receiving approximately 33.3% of the investment."
-        )
+        # Variasi prompt yang berbeda
+        self.PROMPT_VARIATIONS = [
+            (
+                "1. Mandatory Requirement: The product's TVL must be higher than one million USD.\n"
+                "2. Balance Preference: Prioritize products that have a good balance of high current APY and high TVL.\n"
+                "3. Portfolio Allocation: Select the 3 products with the best combined ranking in terms of current APY and TVL among those with TVL > 1,000,000 USD. "
+                "To determine the combined ranking, rank all eligible products by current APY (highest to lowest) and by TVL (highest to lowest), "
+                "then sum the two ranks for each product. Choose the 3 products with the smallest sum of ranks. Allocate the investment equally among these 3 products, "
+                "with each receiving approximately 33.3% of the investment."
+            ),
+            (
+                "1. TVL Threshold: Only consider products with TVL exceeding $1,000,000.\n"
+                "2. Performance Focus: Prefer products with both high APY and substantial TVL.\n"
+                "3. Diversification Strategy: Identify the top 3 performing products based on combined APY and TVL metrics. "
+                "Rank products by APY (descending) and TVL (descending), calculate combined rank score, and select the three with lowest scores. "
+                "Distribute funds equally (33.3% each) across the selected products."
+            ),
+            (
+                "1. Minimum TVL: $1,000,000 required for consideration.\n"
+                "2. Optimization Criteria: Seek optimal balance between APY returns and TVL security.\n"
+                "3. Investment Allocation: Pick the 3 highest-ranked products based on APY+TVL composite score. "
+                "Compute ranking by sorting products by APY (high to low) and TVL (high to low), sum the ranks. "
+                "Invest equal amounts (33.3%) in the top 3 products with lowest combined rank scores."
+            ),
+            (
+                "1. Requirement: TVL > 1,000,000 USD\n"
+                "2. Strategy: Maximize returns while minimizing risk through balanced APY/TVL selection\n"
+                "3. Action: Select 3 products with best APY+TVL ranking combination. "
+                "Rank all qualifying products twice - by APY (best first) and TVL (best first). "
+                "Sum the ranks for each product. Choose 3 with smallest rank sums. "
+                "Allocate funds equally (33.3% per product)."
+            )
+        ]
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
@@ -212,13 +237,16 @@ class AutoStaking:
         
     def generate_recommendation_payload(self, address: str):
         try:
+            # Pilih prompt secara acak dari variasi yang tersedia
+            selected_prompt = random.choice(self.PROMPT_VARIATIONS)
+            
             usdc_assets = int(self.usdc_amount * (10 ** 6))
             usdt_assets = int(self.usdt_amount * (10 ** 6))
             musd_assets = int(self.musd_amount * (10 ** 6))
 
             payload = {
                 "user":address,
-                "profile":self.PROMPT,
+                "profile":selected_prompt,
                 "userPositions":[],
                 "userAssets":[
                     {
@@ -502,7 +530,7 @@ class AutoStaking:
             return None, None
         
     async def print_timer(self):
-        for remaining in range(random.randint(self.max_delay, self.max_delay), 0, -1):
+        for remaining in range(random.randint(self.min_delay, self.max_delay), 0, -1):
             print(
                 f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
                 f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
@@ -577,7 +605,7 @@ class AutoStaking:
                     self.max_delay = max_delay
                     break
                 else:
-                    print(f"{Fore.RED + Style.BRIGHT}Min Delay must be >= Min Delay.{Style.RESET_ALL}")
+                    print(f"{Fore.RED + Style.BRIGHT}Max Delay must be >= Min Delay.{Style.RESET_ALL}")
             except ValueError:
                 print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a number.{Style.RESET_ALL}")
 
@@ -604,7 +632,7 @@ class AutoStaking:
         rotate = False
         if choose in [1, 2]:
             while True:
-                rotate = input(f"{Fore.BLUE + Style.BRIGHT}Rotate Invalid Proxy? [y/n] -> {Style.RESET_ALL}").strip()
+                rotate = input(f"{Fore.BLUE + Style.BRIGHT}Rotate Invalid Proxy? [y/n] -> {Style.RESET_ALL}").strip().lower()
 
                 if rotate in ["y", "n"]:
                     rotate = rotate == "y"
@@ -647,7 +675,7 @@ class AutoStaking:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
-                if attempt < retries:
+                if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
                 self.log(
@@ -677,7 +705,7 @@ class AutoStaking:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
-                if attempt < retries:
+                if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
                 return None
@@ -701,7 +729,7 @@ class AutoStaking:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
-                if attempt < retries:
+                if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
                 return None
@@ -723,7 +751,7 @@ class AutoStaking:
                 return False
             
             return True
-        
+    
     async def process_wallet_login(self, account: str, address: str, use_proxy: bool, rotate_proxy: bool):
        is_valid = await self.process_check_connection(address, use_proxy, rotate_proxy)
        if is_valid:
@@ -877,21 +905,21 @@ class AutoStaking:
                     f"{Fore.WHITE+Style.BRIGHT} {self.musd_amount} MockUSD {Style.RESET_ALL}"
                 )
 
-                if not usdc_balance or usdc_balance <= self.usdc_amount:
+                if not usdc_balance or usdc_balance < self.usdc_amount:
                     self.log(
                         f"{Fore.CYAN+Style.BRIGHT}     Status  :{Style.RESET_ALL}"
                         f"{Fore.YELLOW+Style.BRIGHT} Insufficient USDC Token Balance {Style.RESET_ALL}"
                     )
                     break
 
-                if not usdt_balance or usdt_balance <= self.usdc_amount:
+                if not usdt_balance or usdt_balance < self.usdt_amount:
                     self.log(
                         f"{Fore.CYAN+Style.BRIGHT}     Status  :{Style.RESET_ALL}"
                         f"{Fore.YELLOW+Style.BRIGHT} Insufficient USDT Token Balance {Style.RESET_ALL}"
                     )
                     break
 
-                if not musd_balance or musd_balance <= self.usdc_amount:
+                if not musd_balance or musd_balance < self.musd_amount:
                     self.log(
                         f"{Fore.CYAN+Style.BRIGHT}     Status  :{Style.RESET_ALL}"
                         f"{Fore.YELLOW+Style.BRIGHT} Insufficient MockUSD Token Balance {Style.RESET_ALL}"
