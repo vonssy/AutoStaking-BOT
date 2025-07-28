@@ -1,16 +1,27 @@
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import serialization
 from web3 import Web3
 from web3.exceptions import TransactionNotFound
-from eth_utils import to_hex
 from eth_account import Account
-from eth_account.messages import encode_defunct
 from aiohttp import ClientResponseError, ClientSession, ClientTimeout, BasicAuth
 from aiohttp_socks import ProxyConnector
 from fake_useragent import FakeUserAgent
-from datetime import datetime, timezone
+from datetime import datetime
+from base64 import b64encode
 from colorama import *
-import asyncio, random, string, time, json, re, os, pytz
+import asyncio, random, time, json, re, os, pytz
 
 wib = pytz.timezone('Asia/Jakarta')
+
+PUBLIC_KEY_PEM = b"""
+-----BEGIN PUBLIC KEY-----
+MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDWPv2qP8+xLABhn3F/U/hp76HP
+e8dD7kvPUh70TC14kfvwlLpCTHhYf2/6qulU1aLWpzCz3PJr69qonyqocx8QlThq
+5Hik6H/5fmzHsjFvoPeGN5QRwYsVUH07MbP7MNbJH5M2zD5Z1WEp9AHJklITbS1z
+h23cf2WfZ0vwDYzZ8QIDAQAB
+-----END PUBLIC KEY-----
+"""
 
 class AutoStaking:
     def __init__(self) -> None:
@@ -62,7 +73,7 @@ class AutoStaking:
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
-        self.access_tokens = {}
+        self.auth_tokens = {}
         self.used_nonce = {}
         self.staking_count = 0
         self.usdc_amount = 0
@@ -186,29 +197,24 @@ class AutoStaking:
         except Exception as e:
             return None
         
-    def generate_random_string(self):
-        part1 = ''.join(random.choices(string.ascii_lowercase + string.digits, k=13))
-        part2 = ''.join(random.choices(string.ascii_lowercase + string.digits, k=13))
-        return part1 + part2
-        
-    def generate_login_payload(self, account: str, address: str):
+    def generate_auth_token(self, address: str):
         try:
-            nonce = self.generate_random_string()
-            timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
-            message = f"autostaking.pro wants you to sign in with your Ethereum account:\n{address}\n\nWelcome to AutoStaking! Sign in to authenticate your wallet.\n\nURI: https://autostaking.pro\nVersion: 1\nChain ID: 1\nNonce: {nonce}\nIssued At: {timestamp}"
-            encoded_message = encode_defunct(text=message)
-            signed_message = Account.sign_message(encoded_message, private_key=account)
-            signature = to_hex(signed_message.signature)
+            public_key = serialization.load_pem_public_key(PUBLIC_KEY_PEM)
 
-            payload = {
-                "address":address,
-                "message":message,
-                "signature":signature      
-            }
+            ciphertext = public_key.encrypt(
+                address.encode('utf-8'),
+                padding.OAEP(
+                    mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                    algorithm=hashes.SHA256(),
+                    label=None
+                )
+            )
 
-            return payload
+            token_base64 = b64encode(ciphertext).decode('utf-8')
+
+            return token_base64
         except Exception as e:
-            raise Exception(f"Generate Req Payload Failed: {str(e)}")
+            return None
         
     def generate_recommendation_payload(self, address: str):
         try:
@@ -629,41 +635,13 @@ class AutoStaking:
                 f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
             )
             return None
-        
-    async def wallet_login(self, account: str, address: str, use_proxy: bool, retries=5):
-        url = f"{self.BASE_API}/user/login"
-        data = json.dumps(self.generate_login_payload(account, address))
-        headers = {
-            **self.HEADERS,
-            "Content-Length": str(len(data)),
-            "Content-Type": "application/json"
-        }
-        for attempt in range(retries):
-            proxy_url = self.get_next_proxy_for_account(address) if use_proxy else None
-            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
-            try:
-                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.post(url=url, headers=headers, data=data, proxy=proxy, proxy_auth=proxy_auth) as response:
-                        response.raise_for_status()
-                        return await response.json()
-            except (Exception, ClientResponseError) as e:
-                if attempt < retries:
-                    await asyncio.sleep(5)
-                    continue
-                self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}Status  :{Style.RESET_ALL}"
-                    f"{Fore.RED+Style.BRIGHT} Login Failed {Style.RESET_ALL}"
-                    f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
-                    f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
-                )
-                return None
             
     async def financial_portfolio_recommendation(self, address: str, use_proxy: bool, retries=5):
         url = f"{self.BASE_API}/investment/financial-portfolio-recommendation"
         data = json.dumps(self.generate_recommendation_payload(address))
         headers = {
             **self.HEADERS,
-            "Authorization": self.access_tokens[address],
+            "Authorization": self.auth_tokens[address],
             "Content-Length": str(len(data)),
             "Content-Type": "application/json"
         }
@@ -687,7 +665,7 @@ class AutoStaking:
         data = json.dumps(self.generate_transactions_payload(address, change_tx))
         headers = {
             **self.HEADERS,
-            "Authorization": self.access_tokens[address],
+            "Authorization": self.auth_tokens[address],
             "Content-Length": str(len(data)),
             "Content-Type": "application/json"
         }
@@ -723,22 +701,6 @@ class AutoStaking:
                 return False
             
             return True
-        
-    async def process_wallet_login(self, account: str, address: str, use_proxy: bool, rotate_proxy: bool):
-       is_valid = await self.process_check_connection(address, use_proxy, rotate_proxy)
-       if is_valid:
-            
-            login = await self.wallet_login(account, address, use_proxy)
-            if login:
-                self.access_tokens[address] = login["data"]["jwt"]
-
-                self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}Status  :{Style.RESET_ALL}"
-                    f"{Fore.GREEN + Style.BRIGHT} Login Success {Style.RESET_ALL}"
-                )
-                return True
-            
-            return False
     
     async def process_perform_claim_faucet(self, account: str, address: str, use_proxy: bool):
         next_faucet_claim_time = await self.get_next_faucet_claim_time(address, use_proxy)
@@ -818,8 +780,8 @@ class AutoStaking:
             )
 
     async def process_accounts(self, account: str, address: str, use_proxy: bool, rotate_proxy: bool):
-        logined = await self.process_wallet_login(account, address, use_proxy, rotate_proxy)
-        if logined:
+        is_valid = await self.process_check_connection(address, use_proxy, rotate_proxy)
+        if is_valid:
             web3 = await self.get_web3_with_check(address, use_proxy)
             if not web3:
                 self.log(
@@ -938,6 +900,14 @@ class AutoStaking:
                             self.log(
                                 f"{Fore.CYAN + Style.BRIGHT}Status  :{Style.RESET_ALL}"
                                 f"{Fore.RED + Style.BRIGHT} Invalid Private Key or Library Version Not Supported {Style.RESET_ALL}"
+                            )
+                            continue
+
+                        self.auth_tokens[address] = self.generate_auth_token(address)
+                        if not self.auth_tokens[address]:
+                            self.log(
+                                f"{Fore.CYAN + Style.BRIGHT}Status  :{Style.RESET_ALL}"
+                                f"{Fore.RED + Style.BRIGHT} Cryptography Library Version Not Supported {Style.RESET_ALL}"
                             )
                             continue
 

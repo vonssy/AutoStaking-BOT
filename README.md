@@ -34,7 +34,7 @@ AutoStaking BOT
    pip install -r requirements.txt #or pip3 install -r requirements.txt
    ```
 
-### Note: Check your web3, eth-account, and eth-utils library version first. If not same with version in requirements.txt, u must uninstall that library.
+### Note: Check your web3, eth-account, and cryptography library version first. If not same with version in requirements.txt, u must uninstall that library.
 - **Check Library Version**
   ```bash
     pip show libary_name
