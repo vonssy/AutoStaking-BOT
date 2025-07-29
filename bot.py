@@ -9,7 +9,6 @@ from aiohttp_socks import ProxyConnector
 from fake_useragent import FakeUserAgent
 from datetime import datetime
 from base64 import b64encode
-from colorama import *
 import asyncio, random, time, json, re, os, pytz
 
 wib = pytz.timezone('Asia/Jakarta')
@@ -62,14 +61,40 @@ class AutoStaking:
                 ]
             }
         ]
-        self.PROMPT = (
+        self.PROMPTS = [
+            # Original balanced strategy
             "1. Mandatory Requirement: The product's TVL must be higher than one million USD.\n"
             "2. Balance Preference: Prioritize products that have a good balance of high current APY and high TVL.\n"
             "3. Portfolio Allocation: Select the 3 products with the best combined ranking in terms of current APY and TVL among those with TVL > 1,000,000 USD. "
             "To determine the combined ranking, rank all eligible products by current APY (highest to lowest) and by TVL (highest to lowest), "
             "then sum the two ranks for each product. Choose the 3 products with the smallest sum of ranks. Allocate the investment equally among these 3 products, "
-            "with each receiving approximately 33.3% of the investment."
-        )
+            "with each receiving approximately 33.3% of the investment.",
+
+            # Alternative 1: Focus on high APY with stability
+            "1. Mandatory Requirement: TVL must exceed $1M USD and APY must be at least 5%.\n"
+            "2. Priority: Select products with consistently high APY over the last 30 days.\n"
+            "3. Allocation: Choose the top 3 performing products meeting criteria. Distribute funds equally (33.3% each).",
+
+            # Alternative 2: Risk-adjusted returns
+            "1. Requirement: Minimum TVL of $1.5M USD.\n"
+            "2. Strategy: Prioritize products with the best risk-adjusted returns (APY/TVL ratio).\n"
+            "3. Diversification: Select 4 products across different protocol categories. Allocate 25% to each.",
+
+            # Alternative 3: Conservative approach
+            "1. Requirement: TVL > $2M USD and established protocol (age > 6 months).\n"
+            "2. Focus: Capital preservation with moderate returns (APY 5-15%).\n"
+            "3. Allocation: Choose 2 products with highest TVL and 1 with best APY stability. Distribute 40%/40%/20%.",
+
+            # Alternative 4: Aggressive growth
+            "1. Requirement: TVL > $750K USD with APY > 20%.\n"
+            "2. Focus: Maximize short-term returns with higher risk tolerance.\n"
+            "3. Allocation: Select 5 highest APY products. Distribute equally (20% each).",
+
+            # Alternative 5: Balanced multi-strategy
+            "1. Requirement: TVL > $1.2M USD and positive 90-day performance.\n"
+            "2. Strategy: 50% allocation to top 2 TVL products, 30% to top APY, 20% to best risk-adjusted.\n"
+            "3. Diversification: Minimum 3 different protocol types. Rebalance monthly."
+        ]
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
@@ -79,27 +104,30 @@ class AutoStaking:
         self.usdc_amount = 0
         self.usdt_amount = 0
         self.musd_amount = 0
+        self.min_delay = 0
         self.max_delay = 0
-        self.max_delay = 0
+
+    def get_random_prompt(self):
+        return random.choice(self.PROMPTS)
 
     def clear_terminal(self):
         os.system('cls' if os.name == 'nt' else 'clear')
 
     def log(self, message):
         print(
-            f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
-            f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}{message}",
+            f"\033[36m\033[1m[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]\033[0m"
+            f"\033[97m\033[1m | \033[0m{message}",
             flush=True
         )
 
     def welcome(self):
         print(
             f"""
-        {Fore.GREEN + Style.BRIGHT}AutoStaking{Fore.BLUE + Style.BRIGHT} Auto BOT
+        \033[92m\033[1mAutoStaking\033[94m\033[1m Auto BOT
             """
             f"""
-        {Fore.GREEN + Style.BRIGHT}Rey? {Fore.YELLOW + Style.BRIGHT}<INI WATERMARK>
-            """
+        \033[92m\033[1mRey? \033[93m\033[1m<INI WATERMARK>
+            \033[0m"""
         )
 
     def format_seconds(self, seconds):
@@ -120,22 +148,22 @@ class AutoStaking:
                         self.proxies = [line.strip() for line in content.splitlines() if line.strip()]
             else:
                 if not os.path.exists(filename):
-                    self.log(f"{Fore.RED + Style.BRIGHT}File {filename} Not Found.{Style.RESET_ALL}")
+                    self.log(f"\033[91m\033[1mFile {filename} Not Found.\033[0m")
                     return
                 with open(filename, 'r') as f:
                     self.proxies = [line.strip() for line in f.read().splitlines() if line.strip()]
             
             if not self.proxies:
-                self.log(f"{Fore.RED + Style.BRIGHT}No Proxies Found.{Style.RESET_ALL}")
+                self.log("\033[91m\033[1mNo Proxies Found.\033[0m")
                 return
 
             self.log(
-                f"{Fore.GREEN + Style.BRIGHT}Proxies Total  : {Style.RESET_ALL}"
-                f"{Fore.WHITE + Style.BRIGHT}{len(self.proxies)}{Style.RESET_ALL}"
+                f"\033[92m\033[1mProxies Total  : \033[0m"
+                f"\033[97m\033[1m{len(self.proxies)}\033[0m"
             )
         
         except Exception as e:
-            self.log(f"{Fore.RED + Style.BRIGHT}Failed To Load Proxies: {e}{Style.RESET_ALL}")
+            self.log(f"\033[91m\033[1mFailed To Load Proxies: {e}\033[0m")
             self.proxies = []
 
     def check_proxy_schemes(self, proxies):
@@ -185,7 +213,6 @@ class AutoStaking:
         try:
             account = Account.from_key(account)
             address = account.address
-            
             return address
         except Exception as e:
             return None
@@ -211,7 +238,6 @@ class AutoStaking:
             )
 
             token_base64 = b64encode(ciphertext).decode('utf-8')
-
             return token_base64
         except Exception as e:
             return None
@@ -224,7 +250,7 @@ class AutoStaking:
 
             payload = {
                 "user":address,
-                "profile":self.PROMPT,
+                "profile":self.get_random_prompt(),
                 "userPositions":[],
                 "userAssets":[
                     {
@@ -312,8 +338,8 @@ class AutoStaking:
             return token_balance
         except Exception as e:
             self.log(
-                f"{Fore.CYAN+Style.BRIGHT}     Message :{Style.RESET_ALL}"
-                f"{Fore.RED+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+                f"\033[36m\033[1m     Message :\033[0m"
+                f"\033[91m\033[1m {str(e)} \033[0m"
             )
             return None
         
@@ -328,8 +354,8 @@ class AutoStaking:
                 pass
             except Exception as e:
                 self.log(
-                    f"{Fore.CYAN + Style.BRIGHT}    Message :{Style.RESET_ALL}"
-                    f"{Fore.YELLOW + Style.BRIGHT} [Attempt {attempt + 1}] Send TX Error: {str(e)} {Style.RESET_ALL}"
+                    f"\033[36m\033[1m    Message :\033[0m"
+                    f"\033[93m\033[1m [Attempt {attempt + 1}] Send TX Error: {str(e)} \033[0m"
                 )
             await asyncio.sleep(2 ** attempt)
         raise Exception("Transaction Hash Not Found After Maximum Retries")
@@ -343,8 +369,8 @@ class AutoStaking:
                 pass
             except Exception as e:
                 self.log(
-                    f"{Fore.CYAN + Style.BRIGHT}    Message :{Style.RESET_ALL}"
-                    f"{Fore.YELLOW + Style.BRIGHT} [Attempt {attempt + 1}] Wait for Receipt Error: {str(e)} {Style.RESET_ALL}"
+                    f"\033[36m\033[1m    Message :\033[0m"
+                    f"\033[93m\033[1m [Attempt {attempt + 1}] Wait for Receipt Error: {str(e)} \033[0m"
                 )
             await asyncio.sleep(2 ** attempt)
         raise Exception("Transaction Receipt Not Found After Maximum Retries")
@@ -361,8 +387,8 @@ class AutoStaking:
             return next_faucet_claim_time
         except Exception as e:
             self.log(
-                f"{Fore.CYAN+Style.BRIGHT}    Message :{Style.RESET_ALL}"
-                f"{Fore.RED+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+                f"\033[36m\033[1m    Message :\033[0m"
+                f"\033[91m\033[1m {str(e)} \033[0m"
             )
             return None
         
@@ -397,8 +423,8 @@ class AutoStaking:
             return tx_hash, block_number
         except Exception as e:
             self.log(
-                f"{Fore.CYAN+Style.BRIGHT}    Message :{Style.RESET_ALL}"
-                f"{Fore.RED+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+                f"\033[36m\033[1m    Message :\033[0m"
+                f"\033[91m\033[1m {str(e)} \033[0m"
             )
             return None, None
         
@@ -438,20 +464,20 @@ class AutoStaking:
                 explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
                 
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}   Approve :{Style.RESET_ALL}"
-                    f"{Fore.GREEN+Style.BRIGHT} Success {Style.RESET_ALL}"
+                    f"\033[36m\033[1m   Approve :\033[0m"
+                    f"\033[92m\033[1m Success \033[0m"
                 )
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}   Block   :{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {block_number} {Style.RESET_ALL}"
+                    f"\033[36m\033[1m   Block   :\033[0m"
+                    f"\033[97m\033[1m {block_number} \033[0m"
                 )
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}   Tx Hash :{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {tx_hash} {Style.RESET_ALL}"
+                    f"\033[36m\033[1m   Tx Hash :\033[0m"
+                    f"\033[97m\033[1m {tx_hash} \033[0m"
                 )
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}   Explorer:{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {explorer} {Style.RESET_ALL}"
+                    f"\033[36m\033[1m   Explorer:\033[0m"
+                    f"\033[97m\033[1m {explorer} \033[0m"
                 )
                 await asyncio.sleep(5)
 
@@ -502,19 +528,19 @@ class AutoStaking:
             return tx_hash, block_number
         except Exception as e:
             self.log(
-                f"{Fore.CYAN+Style.BRIGHT}    Message :{Style.RESET_ALL}"
-                f"{Fore.RED+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+                f"\033[36m\033[1m    Message :\033[0m"
+                f"\033[91m\033[1m {str(e)} \033[0m"
             )
             return None, None
         
     async def print_timer(self):
-        for remaining in range(random.randint(self.max_delay, self.max_delay), 0, -1):
+        for remaining in range(random.randint(self.min_delay, self.max_delay), 0, -1):
             print(
-                f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
-                f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
-                f"{Fore.BLUE + Style.BRIGHT}Wait For{Style.RESET_ALL}"
-                f"{Fore.WHITE + Style.BRIGHT} {remaining} {Style.RESET_ALL}"
-                f"{Fore.BLUE + Style.BRIGHT}Seconds For Next Tx...{Style.RESET_ALL}",
+                f"\033[36m\033[1m[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]\033[0m"
+                f"\033[97m\033[1m | \033[0m"
+                f"\033[94m\033[1mWait For\033[0m"
+                f"\033[97m\033[1m {remaining} \033[0m"
+                f"\033[94m\033[1mSeconds For Next Tx...\033[0m",
                 end="\r",
                 flush=True
             )
@@ -523,76 +549,76 @@ class AutoStaking:
     def print_question(self):
         while True:
             try:
-                staking_count = int(input(f"{Fore.YELLOW + Style.BRIGHT}Enter Staking Count For Each Wallets -> {Style.RESET_ALL}").strip())
+                staking_count = int(input("\033[93m\033[1mEnter Staking Count For Each Wallets -> \033[0m").strip())
                 if staking_count > 0:
                     self.staking_count = staking_count
                     break
                 else:
-                    print(f"{Fore.RED + Style.BRIGHT}Please enter positive number.{Style.RESET_ALL}")
+                    print("\033[91m\033[1mPlease enter positive number.\033[0m")
             except ValueError:
-                print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a number.{Style.RESET_ALL}")
+                print("\033[91m\033[1mInvalid input. Enter a number.\033[0m")
 
         while True:
             try:
-                usdc_amount = float(input(f"{Fore.YELLOW + Style.BRIGHT}Enter USDC Amount -> {Style.RESET_ALL}").strip())
+                usdc_amount = float(input("\033[93m\033[1mEnter USDC Amount -> \033[0m").strip())
                 if usdc_amount > 0:
                     self.usdc_amount = usdc_amount
                     break
                 else:
-                    print(f"{Fore.RED + Style.BRIGHT}Amount must be greater than 0.{Style.RESET_ALL}")
+                    print("\033[91m\033[1mAmount must be greater than 0.\033[0m")
             except ValueError:
-                print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a float or decimal number.{Style.RESET_ALL}")
+                print("\033[91m\033[1mInvalid input. Enter a float or decimal number.\033[0m")
 
         while True:
             try:
-                usdt_amount = float(input(f"{Fore.YELLOW + Style.BRIGHT}Enter USDT Amount -> {Style.RESET_ALL}").strip())
+                usdt_amount = float(input("\033[93m\033[1mEnter USDT Amount -> \033[0m").strip())
                 if usdt_amount > 0:
                     self.usdt_amount = usdt_amount
                     break
                 else:
-                    print(f"{Fore.RED + Style.BRIGHT}Amount must be greater than 0.{Style.RESET_ALL}")
+                    print("\033[91m\033[1mAmount must be greater than 0.\033[0m")
             except ValueError:
-                print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a float or decimal number.{Style.RESET_ALL}")
+                print("\033[91m\033[1mInvalid input. Enter a float or decimal number.\033[0m")
 
         while True:
             try:
-                musd_amount = float(input(f"{Fore.YELLOW + Style.BRIGHT}Enter MockUSD Amount -> {Style.RESET_ALL}").strip())
+                musd_amount = float(input("\033[93m\033[1mEnter MockUSD Amount -> \033[0m").strip())
                 if musd_amount > 0:
                     self.musd_amount = musd_amount
                     break
                 else:
-                    print(f"{Fore.RED + Style.BRIGHT}Amount must be greater than 0.{Style.RESET_ALL}")
+                    print("\033[91m\033[1mAmount must be greater than 0.\033[0m")
             except ValueError:
-                print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a float or decimal number.{Style.RESET_ALL}")
+                print("\033[91m\033[1mInvalid input. Enter a float or decimal number.\033[0m")
 
         while True:
             try:
-                min_delay = int(input(f"{Fore.YELLOW + Style.BRIGHT}Min Delay Each Tx -> {Style.RESET_ALL}").strip())
+                min_delay = int(input("\033[93m\033[1mMin Delay Each Tx -> \033[0m").strip())
                 if min_delay >= 0:
                     self.min_delay = min_delay
                     break
                 else:
-                    print(f"{Fore.RED + Style.BRIGHT}Min Delay must be >= 0.{Style.RESET_ALL}")
+                    print("\033[91m\033[1mMin Delay must be >= 0.\033[0m")
             except ValueError:
-                print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a number.{Style.RESET_ALL}")
+                print("\033[91m\033[1mInvalid input. Enter a number.\033[0m")
 
         while True:
             try:
-                max_delay = int(input(f"{Fore.YELLOW + Style.BRIGHT}Max Delay Each Tx -> {Style.RESET_ALL}").strip())
-                if max_delay >= min_delay:
+                max_delay = int(input("\033[93m\033[1mMax Delay Each Tx -> \033[0m").strip())
+                if max_delay >= self.min_delay:
                     self.max_delay = max_delay
                     break
                 else:
-                    print(f"{Fore.RED + Style.BRIGHT}Min Delay must be >= Min Delay.{Style.RESET_ALL}")
+                    print("\033[91m\033[1mMax Delay must be >= Min Delay.\033[0m")
             except ValueError:
-                print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a number.{Style.RESET_ALL}")
+                print("\033[91m\033[1mInvalid input. Enter a number.\033[0m")
 
         while True:
             try:
-                print(f"{Fore.WHITE + Style.BRIGHT}1. Run With Free Proxyscrape Proxy{Style.RESET_ALL}")
-                print(f"{Fore.WHITE + Style.BRIGHT}2. Run With Private Proxy{Style.RESET_ALL}")
-                print(f"{Fore.WHITE + Style.BRIGHT}3. Run Without Proxy{Style.RESET_ALL}")
-                choose = int(input(f"{Fore.BLUE + Style.BRIGHT}Choose [1/2/3] -> {Style.RESET_ALL}").strip())
+                print("\033[97m\033[1m1. Run With Free Proxyscrape Proxy\033[0m")
+                print("\033[97m\033[1m2. Run With Private Proxy\033[0m")
+                print("\033[97m\033[1m3. Run Without Proxy\033[0m")
+                choose = int(input("\033[94m\033[1mChoose [1/2/3] -> \033[0m").strip())
 
                 if choose in [1, 2, 3]:
                     proxy_type = (
@@ -600,23 +626,23 @@ class AutoStaking:
                         "With Private" if choose == 2 else 
                         "Without"
                     )
-                    print(f"{Fore.GREEN + Style.BRIGHT}Run {proxy_type} Proxy Selected.{Style.RESET_ALL}")
+                    print(f"\033[92m\033[1mRun {proxy_type} Proxy Selected.\033[0m")
                     break
                 else:
-                    print(f"{Fore.RED + Style.BRIGHT}Please enter either 1, 2 or 3.{Style.RESET_ALL}")
+                    print("\033[91m\033[1mPlease enter either 1, 2 or 3.\033[0m")
             except ValueError:
-                print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a number (1, 2 or 3).{Style.RESET_ALL}")
+                print("\033[91m\033[1mInvalid input. Enter a number (1, 2 or 3).\033[0m")
 
         rotate = False
         if choose in [1, 2]:
             while True:
-                rotate = input(f"{Fore.BLUE + Style.BRIGHT}Rotate Invalid Proxy? [y/n] -> {Style.RESET_ALL}").strip()
+                rotate = input("\033[94m\033[1mRotate Invalid Proxy? [y/n] -> \033[0m").strip().lower()
 
                 if rotate in ["y", "n"]:
                     rotate = rotate == "y"
                     break
                 else:
-                    print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter 'y' or 'n'.{Style.RESET_ALL}")
+                    print("\033[91m\033[1mInvalid input. Enter 'y' or 'n'.\033[0m")
 
         return choose, rotate
     
@@ -629,10 +655,10 @@ class AutoStaking:
                     return True
         except (Exception, ClientResponseError) as e:
             self.log(
-                f"{Fore.CYAN+Style.BRIGHT}Status  :{Style.RESET_ALL}"
-                f"{Fore.RED+Style.BRIGHT} Connection Not 200 OK {Style.RESET_ALL}"
-                f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
-                f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+                f"\033[36m\033[1mStatus  :\033[0m"
+                f"\033[91m\033[1m Connection Not 200 OK \033[0m"
+                f"\033[95m\033[1m-\033[0m"
+                f"\033[93m\033[1m {str(e)} \033[0m"
             )
             return None
             
@@ -688,8 +714,8 @@ class AutoStaking:
         while True:
             proxy = self.get_next_proxy_for_account(address) if use_proxy else None
             self.log(
-                f"{Fore.CYAN+Style.BRIGHT}Proxy   :{Style.RESET_ALL}"
-                f"{Fore.WHITE + Style.BRIGHT} {proxy} {Style.RESET_ALL}"
+                f"\033[36m\033[1mProxy   :\033[0m"
+                f"\033[97m\033[1m {proxy} \033[0m"
             )
 
             is_valid = await self.check_connection(proxy)
@@ -711,35 +737,35 @@ class AutoStaking:
                     explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
 
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
-                        f"{Fore.GREEN+Style.BRIGHT} Success {Style.RESET_ALL}"
+                        f"\033[36m\033[1m    Status  :\033[0m"
+                        f"\033[92m\033[1m Success \033[0m"
                     )
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}    Block   :{Style.RESET_ALL}"
-                        f"{Fore.WHITE+Style.BRIGHT} {block_number} {Style.RESET_ALL}"
+                        f"\033[36m\033[1m    Block   :\033[0m"
+                        f"\033[97m\033[1m {block_number} \033[0m"
                     )
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}    Tx Hash :{Style.RESET_ALL}"
-                        f"{Fore.WHITE+Style.BRIGHT} {tx_hash} {Style.RESET_ALL}"
+                        f"\033[36m\033[1m    Tx Hash :\033[0m"
+                        f"\033[97m\033[1m {tx_hash} \033[0m"
                     )
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}    Explorer:{Style.RESET_ALL}"
-                        f"{Fore.WHITE+Style.BRIGHT} {explorer} {Style.RESET_ALL}"
+                        f"\033[36m\033[1m    Explorer:\033[0m"
+                        f"\033[97m\033[1m {explorer} \033[0m"
                     )
                 
                 else:
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
-                        f"{Fore.RED+Style.BRIGHT} Perform On-Chain Failed {Style.RESET_ALL}"
+                        f"\033[36m\033[1m    Status  :\033[0m"
+                        f"\033[91m\033[1m Perform On-Chain Failed \033[0m"
                     )
             else:
                 formatted_next_claim = datetime.fromtimestamp(next_faucet_claim_time).astimezone(wib).strftime("%x %X %Z")
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
-                    f"{Fore.YELLOW+Style.BRIGHT} Already Claimed {Style.RESET_ALL}"
-                    f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
-                    f"{Fore.CYAN+Style.BRIGHT} Next Claim at {Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT}{formatted_next_claim}{Style.RESET_ALL}"
+                    f"\033[36m\033[1m    Status  :\033[0m"
+                    f"\033[93m\033[1m Already Claimed \033[0m"
+                    f"\033[95m\033[1m-\033[0m"
+                    f"\033[36m\033[1m Next Claim at \033[0m"
+                    f"\033[97m\033[1m{formatted_next_claim}\033[0m"
                 )
 
     async def process_perform_staking(self, account: str, address: str, use_proxy: bool):
@@ -752,31 +778,31 @@ class AutoStaking:
                 explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
 
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
-                    f"{Fore.GREEN+Style.BRIGHT} Success {Style.RESET_ALL}"
+                    f"\033[36m\033[1m    Status  :\033[0m"
+                    f"\033[92m\033[1m Success \033[0m"
                 )
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}    Block   :{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {block_number} {Style.RESET_ALL}"
+                    f"\033[36m\033[1m    Block   :\033[0m"
+                    f"\033[97m\033[1m {block_number} \033[0m"
                 )
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}    Tx Hash :{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {tx_hash} {Style.RESET_ALL}"
+                    f"\033[36m\033[1m    Tx Hash :\033[0m"
+                    f"\033[97m\033[1m {tx_hash} \033[0m"
                 )
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}    Explorer:{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {explorer} {Style.RESET_ALL}"
+                    f"\033[36m\033[1m    Explorer:\033[0m"
+                    f"\033[97m\033[1m {explorer} \033[0m"
                 )
             
             else:
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
-                    f"{Fore.RED+Style.BRIGHT} Perform On-Chain Failed {Style.RESET_ALL}"
+                    f"\033[36m\033[1m    Status  :\033[0m"
+                    f"\033[91m\033[1m Perform On-Chain Failed \033[0m"
                 )
         else:
             self.log(
-                f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
-                f"{Fore.RED+Style.BRIGHT} GET Financial Portfolio Recommendation Failed {Style.RESET_ALL}"
+                f"\033[36m\033[1m    Status  :\033[0m"
+                f"\033[91m\033[1m GET Financial Portfolio Recommendation Failed \033[0m"
             )
 
     async def process_accounts(self, account: str, address: str, use_proxy: bool, rotate_proxy: bool):
@@ -785,78 +811,78 @@ class AutoStaking:
             web3 = await self.get_web3_with_check(address, use_proxy)
             if not web3:
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}Status  :{Style.RESET_ALL}"
-                    f"{Fore.RED+Style.BRIGHT} Web3 Not Connected {Style.RESET_ALL}"
+                    f"\033[36m\033[1mStatus  :\033[0m"
+                    f"\033[91m\033[1m Web3 Not Connected \033[0m"
                 )
                 return
             
             self.used_nonce[address] = web3.eth.get_transaction_count(address, "pending")
 
-            self.log(f"{Fore.CYAN+Style.BRIGHT}Faucet  :{Style.RESET_ALL}")
+            self.log("\033[36m\033[1mFaucet  :\033[0m")
 
             await self.process_perform_claim_faucet(account, address, use_proxy)
 
-            self.log(f"{Fore.CYAN+Style.BRIGHT}Staking :{Style.RESET_ALL}")
+            self.log("\033[36m\033[1mStaking :\033[0m")
 
             for i in range(self.staking_count):
                 self.log(
-                    f"{Fore.GREEN+Style.BRIGHT} ●{Style.RESET_ALL}"
-                    f"{Fore.BLUE+Style.BRIGHT} Stake {Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT}{i+1}{Style.RESET_ALL}"
-                    f"{Fore.MAGENTA+Style.BRIGHT} Of {Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT}{self.staking_count}{Style.RESET_ALL}                                   "
+                    f"\033[92m\033[1m ●\033[0m"
+                    f"\033[94m\033[1m Stake \033[0m"
+                    f"\033[97m\033[1m{i+1}\033[0m"
+                    f"\033[95m\033[1m Of \033[0m"
+                    f"\033[97m\033[1m{self.staking_count}\033[0m                                   "
                 )
 
-                self.log(f"{Fore.CYAN+Style.BRIGHT}    Balance :{Style.RESET_ALL}")
+                self.log("\033[36m\033[1m    Balance :\033[0m")
 
                 usdc_balance = await self.get_token_balance(address, self.USDC_CONTRACT_ADDRESS, use_proxy)
                 self.log(
-                    f"{Fore.MAGENTA+Style.BRIGHT}       1.{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {usdc_balance} USDC {Style.RESET_ALL}"
+                    f"\033[95m\033[1m       1.\033[0m"
+                    f"\033[97m\033[1m {usdc_balance} USDC \033[0m"
                 )
                 usdt_balance = await self.get_token_balance(address, self.USDT_CONTRACT_ADDRESS, use_proxy)
                 self.log(
-                    f"{Fore.MAGENTA+Style.BRIGHT}       2.{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {usdt_balance} USDT {Style.RESET_ALL}"
+                    f"\033[95m\033[1m       2.\033[0m"
+                    f"\033[97m\033[1m {usdt_balance} USDT \033[0m"
                 )
                 musd_balance = await self.get_token_balance(address, self.MUSD_CONTRACT_ADDRESS, use_proxy)
                 self.log(
-                    f"{Fore.MAGENTA+Style.BRIGHT}       3.{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {musd_balance} MockUSD {Style.RESET_ALL}"
+                    f"\033[95m\033[1m       3.\033[0m"
+                    f"\033[97m\033[1m {musd_balance} MockUSD \033[0m"
                 )
 
-                self.log(f"{Fore.CYAN+Style.BRIGHT}    Amount  :{Style.RESET_ALL}")
+                self.log("\033[36m\033[1m    Amount  :\033[0m")
                 self.log(
-                    f"{Fore.MAGENTA+Style.BRIGHT}       1.{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {self.usdc_amount} USDC {Style.RESET_ALL}"
+                    f"\033[95m\033[1m       1.\033[0m"
+                    f"\033[97m\033[1m {self.usdc_amount} USDC \033[0m"
                 )
                 self.log(
-                    f"{Fore.MAGENTA+Style.BRIGHT}       2.{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {self.usdt_amount} USDT {Style.RESET_ALL}"
+                    f"\033[95m\033[1m       2.\033[0m"
+                    f"\033[97m\033[1m {self.usdt_amount} USDT \033[0m"
                 )
                 self.log(
-                    f"{Fore.MAGENTA+Style.BRIGHT}       3.{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {self.musd_amount} MockUSD {Style.RESET_ALL}"
+                    f"\033[95m\033[1m       3.\033[0m"
+                    f"\033[97m\033[1m {self.musd_amount} MockUSD \033[0m"
                 )
 
-                if not usdc_balance or usdc_balance <= self.usdc_amount:
+                if not usdc_balance or usdc_balance < self.usdc_amount:
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}     Status  :{Style.RESET_ALL}"
-                        f"{Fore.YELLOW+Style.BRIGHT} Insufficient USDC Token Balance {Style.RESET_ALL}"
+                        f"\033[36m\033[1m     Status  :\033[0m"
+                        f"\033[93m\033[1m Insufficient USDC Token Balance \033[0m"
                     )
                     break
 
-                if not usdt_balance or usdt_balance <= self.usdc_amount:
+                if not usdt_balance or usdt_balance < self.usdt_amount:
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}     Status  :{Style.RESET_ALL}"
-                        f"{Fore.YELLOW+Style.BRIGHT} Insufficient USDT Token Balance {Style.RESET_ALL}"
+                        f"\033[36m\033[1m     Status  :\033[0m"
+                        f"\033[93m\033[1m Insufficient USDT Token Balance \033[0m"
                     )
                     break
 
-                if not musd_balance or musd_balance <= self.usdc_amount:
+                if not musd_balance or musd_balance < self.musd_amount:
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}     Status  :{Style.RESET_ALL}"
-                        f"{Fore.YELLOW+Style.BRIGHT} Insufficient MockUSD Token Balance {Style.RESET_ALL}"
+                        f"\033[36m\033[1m     Status  :\033[0m"
+                        f"\033[93m\033[1m Insufficient MockUSD Token Balance \033[0m"
                     )
                     break
 
@@ -878,8 +904,8 @@ class AutoStaking:
                 self.clear_terminal()
                 self.welcome()
                 self.log(
-                    f"{Fore.GREEN + Style.BRIGHT}Account's Total: {Style.RESET_ALL}"
-                    f"{Fore.WHITE + Style.BRIGHT}{len(accounts)}{Style.RESET_ALL}"
+                    f"\033[92m\033[1mAccount's Total: \033[0m"
+                    f"\033[97m\033[1m{len(accounts)}\033[0m"
                 )
 
                 if use_proxy:
@@ -891,49 +917,49 @@ class AutoStaking:
                         address = self.generate_address(account)
 
                         self.log(
-                            f"{Fore.CYAN + Style.BRIGHT}{separator}[{Style.RESET_ALL}"
-                            f"{Fore.WHITE + Style.BRIGHT} {self.mask_account(address)} {Style.RESET_ALL}"
-                            f"{Fore.CYAN + Style.BRIGHT}]{separator}{Style.RESET_ALL}"
+                            f"\033[36m\033[1m{separator}[\033[0m"
+                            f"\033[97m\033[1m {self.mask_account(address)} \033[0m"
+                            f"\033[36m\033[1m]{separator}\033[0m"
                         )
 
                         if not address:
                             self.log(
-                                f"{Fore.CYAN + Style.BRIGHT}Status  :{Style.RESET_ALL}"
-                                f"{Fore.RED + Style.BRIGHT} Invalid Private Key or Library Version Not Supported {Style.RESET_ALL}"
+                                f"\033[36m\033[1mStatus  :\033[0m"
+                                f"\033[91m\033[1m Invalid Private Key or Library Version Not Supported \033[0m"
                             )
                             continue
 
                         self.auth_tokens[address] = self.generate_auth_token(address)
                         if not self.auth_tokens[address]:
                             self.log(
-                                f"{Fore.CYAN + Style.BRIGHT}Status  :{Style.RESET_ALL}"
-                                f"{Fore.RED + Style.BRIGHT} Cryptography Library Version Not Supported {Style.RESET_ALL}"
+                                f"\033[36m\033[1mStatus  :\033[0m"
+                                f"\033[91m\033[1m Cryptography Library Version Not Supported \033[0m"
                             )
                             continue
 
                         await self.process_accounts(account, address, use_proxy, rotate_proxy)
                         await asyncio.sleep(3)
 
-                self.log(f"{Fore.CYAN + Style.BRIGHT}={Style.RESET_ALL}"*72)
+                self.log("\033[36m\033[1m=\033[0m"*72)
                 seconds = 24 * 60 * 60
                 while seconds > 0:
                     formatted_time = self.format_seconds(seconds)
                     print(
-                        f"{Fore.CYAN+Style.BRIGHT}[ Wait for{Style.RESET_ALL}"
-                        f"{Fore.WHITE+Style.BRIGHT} {formatted_time} {Style.RESET_ALL}"
-                        f"{Fore.CYAN+Style.BRIGHT}... ]{Style.RESET_ALL}"
-                        f"{Fore.WHITE+Style.BRIGHT} | {Style.RESET_ALL}"
-                        f"{Fore.BLUE+Style.BRIGHT}All Accounts Have Been Processed.{Style.RESET_ALL}",
+                        f"\033[36m\033[1m[ Wait for\033[0m"
+                        f"\033[97m\033[1m {formatted_time} \033[0m"
+                        f"\033[36m\033[1m... ]\033[0m"
+                        f"\033[97m\033[1m | \033[0m"
+                        f"\033[94m\033[1mAll Accounts Have Been Processed.\033[0m",
                         end="\r"
                     )
                     await asyncio.sleep(1)
                     seconds -= 1
 
         except FileNotFoundError:
-            self.log(f"{Fore.RED}File 'accounts.txt' Not Found.{Style.RESET_ALL}")
+            self.log("\033[91mFile 'accounts.txt' Not Found.\033[0m")
             return
         except Exception as e:
-            self.log(f"{Fore.RED+Style.BRIGHT}Error: {e}{Style.RESET_ALL}")
+            self.log(f"\033[91m\033[1mError: {e}\033[0m")
             raise e
 
 if __name__ == "__main__":
@@ -942,7 +968,7 @@ if __name__ == "__main__":
         asyncio.run(bot.main())
     except KeyboardInterrupt:
         print(
-            f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
-            f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
-            f"{Fore.RED + Style.BRIGHT}[ EXIT ] AutoStaking - BOT{Style.RESET_ALL}                                       "                              
+            f"\033[36m\033[1m[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]\033[0m"
+            f"\033[97m\033[1m | \033[0m"
+            f"\033[91m\033[1m[ EXIT ] AutoStaking - BOT\033[0m                                       "                              
         )
