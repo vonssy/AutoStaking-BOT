@@ -35,7 +35,7 @@ class AutoStaking:
             "Sec-Fetch-Site": "same-site",
             "User-Agent": FakeUserAgent().random
         }
-        self.BASE_API = "https://api.autostaking.pro"
+        self.BASE_API = "https://asia-east2-auto-staking.cloudfunctions.net"
         self.RPC_URL = "https://testnet.dplabs-internal.com/"
         self.USDC_CONTRACT_ADDRESS = "0x72df0bcd7276f2dFbAc900D1CE63c272C4BCcCED"
         self.USDT_CONTRACT_ADDRESS = "0xD4071393f8716661958F766DF660033b3d35fD29"
@@ -637,7 +637,7 @@ class AutoStaking:
             return None
             
     async def financial_portfolio_recommendation(self, address: str, use_proxy: bool, retries=5):
-        url = f"{self.BASE_API}/investment/financial-portfolio-recommendation"
+        url = f"{self.BASE_API}/auto_staking_pharos/investment/financial-portfolio-recommendation"
         data = json.dumps(self.generate_recommendation_payload(address))
         headers = {
             **self.HEADERS,
@@ -661,7 +661,7 @@ class AutoStaking:
                 return None
             
     async def generate_change_transactions(self, address: str, change_tx: list, use_proxy: bool, retries=5):
-        url = f"{self.BASE_API}/investment/generate-change-transactions"
+        url = f"{self.BASE_API}/auto_staking_pharos/investment/generate-change-transactions"
         data = json.dumps(self.generate_transactions_payload(address, change_tx))
         headers = {
             **self.HEADERS,
