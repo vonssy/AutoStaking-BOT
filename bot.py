@@ -459,17 +459,13 @@ class AutoStaking:
         except Exception as e:
             raise Exception(f"Approving Token Contract Failed: {str(e)}")
         
-    async def perform_staking(self, account: str, address: str, change_tx: list, use_proxy: bool):
+    async def perform_staking(self, account: str, address: str, transactions: list, use_proxy: bool):
         try:
             web3 = await self.get_web3_with_check(address, use_proxy)
 
             await self.approving_token(account, address, self.STAKING_ROUTER_ADDRESS, self.USDC_CONTRACT_ADDRESS, self.usdc_amount, use_proxy)
             await self.approving_token(account, address, self.STAKING_ROUTER_ADDRESS, self.USDT_CONTRACT_ADDRESS, self.usdt_amount, use_proxy)
             await self.approving_token(account, address, self.STAKING_ROUTER_ADDRESS, self.MUSD_CONTRACT_ADDRESS, self.musd_amount, use_proxy)
-
-            transactions = await self.generate_change_transactions(address, change_tx, use_proxy)
-            if not transactions:
-                raise Exception("Generate Transaction Calldata Failed")
             
             calldata = transactions["data"]["688688"]["data"]
 
@@ -637,7 +633,7 @@ class AutoStaking:
             return None
             
     async def financial_portfolio_recommendation(self, address: str, use_proxy: bool, retries=5):
-        url = f"{self.BASE_API}/auto_staking_pharos/investment/financial-portfolio-recommendation"
+        url = f"{self.BASE_API}/auto_staking_pharos_v2/investment/financial-portfolio-recommendation"
         data = json.dumps(self.generate_recommendation_payload(address))
         headers = {
             **self.HEADERS,
@@ -661,7 +657,7 @@ class AutoStaking:
                 return None
             
     async def generate_change_transactions(self, address: str, change_tx: list, use_proxy: bool, retries=5):
-        url = f"{self.BASE_API}/auto_staking_pharos/investment/generate-change-transactions"
+        url = f"{self.BASE_API}/auto_staking_pharos_v2/investment/generate-change-transactions"
         data = json.dumps(self.generate_transactions_payload(address, change_tx))
         headers = {
             **self.HEADERS,
@@ -746,37 +742,44 @@ class AutoStaking:
         portfolio = await self.financial_portfolio_recommendation(address, use_proxy)
         if portfolio:
             change_tx = portfolio["data"]["changes"]
-
-            tx_hash, block_number = await self.perform_staking(account, address, change_tx, use_proxy)
-            if tx_hash and block_number:
-                explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
-
-                self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
-                    f"{Fore.GREEN+Style.BRIGHT} Success {Style.RESET_ALL}"
-                )
-                self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}    Block   :{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {block_number} {Style.RESET_ALL}"
-                )
-                self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}    Tx Hash :{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {tx_hash} {Style.RESET_ALL}"
-                )
-                self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}    Explorer:{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {explorer} {Style.RESET_ALL}"
-                )
             
+            transactions = await self.generate_change_transactions(address, change_tx, use_proxy)
+            if transactions:
+                tx_hash, block_number = await self.perform_staking(account, address, transactions, use_proxy)
+                if tx_hash and block_number:
+                    explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
+
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
+                        f"{Fore.GREEN+Style.BRIGHT} Success {Style.RESET_ALL}"
+                    )
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}    Block   :{Style.RESET_ALL}"
+                        f"{Fore.WHITE+Style.BRIGHT} {block_number} {Style.RESET_ALL}"
+                    )
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}    Tx Hash :{Style.RESET_ALL}"
+                        f"{Fore.WHITE+Style.BRIGHT} {tx_hash} {Style.RESET_ALL}"
+                    )
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}    Explorer:{Style.RESET_ALL}"
+                        f"{Fore.WHITE+Style.BRIGHT} {explorer} {Style.RESET_ALL}"
+                    )
+                
+                else:
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
+                        f"{Fore.RED+Style.BRIGHT} Perform On-Chain Failed {Style.RESET_ALL}"
+                    )
             else:
                 self.log(
                     f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
-                    f"{Fore.RED+Style.BRIGHT} Perform On-Chain Failed {Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT} Fetch Transaction Calldata Failed {Style.RESET_ALL}"
                 )
         else:
             self.log(
                 f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
-                f"{Fore.RED+Style.BRIGHT} GET Financial Portfolio Recommendation Failed {Style.RESET_ALL}"
+                f"{Fore.RED+Style.BRIGHT} Fetch Financial Portfolio Recommendation Failed {Style.RESET_ALL}"
             )
 
     async def process_accounts(self, account: str, address: str, use_proxy: bool, rotate_proxy: bool):
