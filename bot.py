@@ -35,7 +35,7 @@ class AutoStaking:
             "Sec-Fetch-Site": "same-site",
             "User-Agent": FakeUserAgent().random
         }
-        self.BASE_API = "https://asia-east2-auto-staking.cloudfunctions.net"
+        self.BASE_API = "https://asia-east2-auto-staking.cloudfunctions.net/auto_staking_pharos_v3"
         self.RPC_URL = "https://testnet.dplabs-internal.com/"
         self.USDC_CONTRACT_ADDRESS = "0x72df0bcd7276f2dFbAc900D1CE63c272C4BCcCED"
         self.USDT_CONTRACT_ADDRESS = "0xD4071393f8716661958F766DF660033b3d35fD29"
@@ -619,7 +619,7 @@ class AutoStaking:
     async def check_connection(self, proxy_url=None):
         connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
         try:
-            async with ClientSession(connector=connector, timeout=ClientTimeout(total=10)) as session:
+            async with ClientSession(connector=connector, timeout=ClientTimeout(total=30)) as session:
                 async with session.get(url="https://api.ipify.org?format=json", proxy=proxy, proxy_auth=proxy_auth) as response:
                     response.raise_for_status()
                     return True
@@ -633,7 +633,7 @@ class AutoStaking:
             return None
             
     async def financial_portfolio_recommendation(self, address: str, use_proxy: bool, retries=5):
-        url = f"{self.BASE_API}/auto_staking_pharos_v2/investment/financial-portfolio-recommendation"
+        url = f"{self.BASE_API}/investment/financial-portfolio-recommendation"
         data = json.dumps(self.generate_recommendation_payload(address))
         headers = {
             **self.HEADERS,
@@ -657,7 +657,7 @@ class AutoStaking:
                 return None
             
     async def generate_change_transactions(self, address: str, change_tx: list, use_proxy: bool, retries=5):
-        url = f"{self.BASE_API}/auto_staking_pharos_v2/investment/generate-change-transactions"
+        url = f"{self.BASE_API}/investment/generate-change-transactions"
         data = json.dumps(self.generate_transactions_payload(address, change_tx))
         headers = {
             **self.HEADERS,
@@ -785,11 +785,15 @@ class AutoStaking:
     async def process_accounts(self, account: str, address: str, use_proxy: bool, rotate_proxy: bool):
         is_valid = await self.process_check_connection(address, use_proxy, rotate_proxy)
         if is_valid:
-            web3 = await self.get_web3_with_check(address, use_proxy)
-            if not web3:
+
+            try:
+                web3 = await self.get_web3_with_check(address, use_proxy)
+            except Exception as e:
                 self.log(
                     f"{Fore.CYAN+Style.BRIGHT}Status  :{Style.RESET_ALL}"
                     f"{Fore.RED+Style.BRIGHT} Web3 Not Connected {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                    f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
                 )
                 return
             
