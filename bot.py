@@ -25,7 +25,7 @@ h23cf2WfZ0vwDYzZ8QIDAQAB
 
 class AutoStaking:
     def __init__(self) -> None:
-        self.HOST_URL = "https://autostaking.pro"
+        self.BASE_URL = "https://autostaking.pro/_next/static/chunks/"
         self.RPC_URL = "https://testnet.dplabs-internal.com/"
         self.USDC_CONTRACT_ADDRESS = "0x72df0bcd7276f2dFbAc900D1CE63c272C4BCcCED"
         self.USDT_CONTRACT_ADDRESS = "0xD4071393f8716661958F766DF660033b3d35fD29"
@@ -304,7 +304,7 @@ class AutoStaking:
             return token_balance
         except Exception as e:
             self.log(
-                f"{Fore.CYAN+Style.BRIGHT}     Message :{Style.RESET_ALL}"
+                f"{Fore.CYAN+Style.BRIGHT}   Message :{Style.RESET_ALL}"
                 f"{Fore.RED+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
             )
             return None
@@ -320,7 +320,7 @@ class AutoStaking:
                 pass
             except Exception as e:
                 self.log(
-                    f"{Fore.CYAN + Style.BRIGHT}    Message :{Style.RESET_ALL}"
+                    f"{Fore.CYAN + Style.BRIGHT}   Message :{Style.RESET_ALL}"
                     f"{Fore.YELLOW + Style.BRIGHT} [Attempt {attempt + 1}] Send TX Error: {str(e)} {Style.RESET_ALL}"
                 )
             await asyncio.sleep(2 ** attempt)
@@ -335,7 +335,7 @@ class AutoStaking:
                 pass
             except Exception as e:
                 self.log(
-                    f"{Fore.CYAN + Style.BRIGHT}    Message :{Style.RESET_ALL}"
+                    f"{Fore.CYAN + Style.BRIGHT}   Message :{Style.RESET_ALL}"
                     f"{Fore.YELLOW + Style.BRIGHT} [Attempt {attempt + 1}] Wait for Receipt Error: {str(e)} {Style.RESET_ALL}"
                 )
             await asyncio.sleep(2 ** attempt)
@@ -353,7 +353,7 @@ class AutoStaking:
             return next_faucet_claim_time
         except Exception as e:
             self.log(
-                f"{Fore.CYAN+Style.BRIGHT}    Message :{Style.RESET_ALL}"
+                f"{Fore.CYAN+Style.BRIGHT}   Message :{Style.RESET_ALL}"
                 f"{Fore.RED+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
             )
             return None
@@ -389,12 +389,12 @@ class AutoStaking:
             return tx_hash, block_number
         except Exception as e:
             self.log(
-                f"{Fore.CYAN+Style.BRIGHT}    Message :{Style.RESET_ALL}"
+                f"{Fore.CYAN+Style.BRIGHT}   Message :{Style.RESET_ALL}"
                 f"{Fore.RED+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
             )
             return None, None
         
-    async def approving_token(self, account: str, address: str, router_address: str, asset_address: str, amount: float, use_proxy: bool):
+    async def approving_token(self, account: str, address: str, ticker: str, router_address: str, asset_address: str, amount: float, use_proxy: bool):
         try:
             web3 = await self.get_web3_with_check(address, use_proxy)
             
@@ -430,8 +430,8 @@ class AutoStaking:
                 explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
                 
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}   Approve :{Style.RESET_ALL}"
-                    f"{Fore.GREEN+Style.BRIGHT} Success {Style.RESET_ALL}"
+                    f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                    f"{Fore.GREEN+Style.BRIGHT} {ticker} Approved {Style.RESET_ALL}                                   "
                 )
                 self.log(
                     f"{Fore.CYAN+Style.BRIGHT}   Block   :{Style.RESET_ALL}"
@@ -445,20 +445,24 @@ class AutoStaking:
                     f"{Fore.CYAN+Style.BRIGHT}   Explorer:{Style.RESET_ALL}"
                     f"{Fore.WHITE+Style.BRIGHT} {explorer} {Style.RESET_ALL}"
                 )
-                await asyncio.sleep(5)
+                await self.print_timer()
 
             return True
         except Exception as e:
             raise Exception(f"Approving Token Contract Failed: {str(e)}")
         
-    async def perform_staking(self, account: str, address: str, transactions: list, use_proxy: bool):
+    async def perform_staking(self, account: str, address: str, tickers: dict, change_tx: list, use_proxy: bool):
         try:
             web3 = await self.get_web3_with_check(address, use_proxy)
 
-            await self.approving_token(account, address, self.STAKING_ROUTER_ADDRESS, self.USDC_CONTRACT_ADDRESS, self.usdc_amount, use_proxy)
-            await self.approving_token(account, address, self.STAKING_ROUTER_ADDRESS, self.USDT_CONTRACT_ADDRESS, self.usdt_amount, use_proxy)
-            await self.approving_token(account, address, self.STAKING_ROUTER_ADDRESS, self.MUSD_CONTRACT_ADDRESS, self.musd_amount, use_proxy)
+            await self.approving_token(account, address, tickers['ticker0'], self.STAKING_ROUTER_ADDRESS, self.USDC_CONTRACT_ADDRESS, self.usdc_amount, use_proxy)
+            await self.approving_token(account, address, tickers['ticker1'], self.STAKING_ROUTER_ADDRESS, self.USDT_CONTRACT_ADDRESS, self.usdt_amount, use_proxy)
+            await self.approving_token(account, address, tickers['ticker2'], self.STAKING_ROUTER_ADDRESS, self.MUSD_CONTRACT_ADDRESS, self.musd_amount, use_proxy)
             
+            transactions = await self.generate_change_transactions(address, change_tx, use_proxy)
+            if not transactions: 
+                raise Exception("Fetch Transaction Calldata Failed")
+                
             calldata = transactions["data"]["688688"]["data"]
 
             estimated_gas = web3.eth.estimate_gas({
@@ -490,7 +494,7 @@ class AutoStaking:
             return tx_hash, block_number
         except Exception as e:
             self.log(
-                f"{Fore.CYAN+Style.BRIGHT}    Message :{Style.RESET_ALL}"
+                f"{Fore.CYAN+Style.BRIGHT}   Message :{Style.RESET_ALL}"
                 f"{Fore.RED+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
             )
             return None, None
@@ -609,11 +613,21 @@ class AutoStaking:
         return choose, rotate
     
     async def fetch_base_api(self, retries=5):
-        url = f"{self.HOST_URL}/_next/static/chunks/5603-ca6c90d1ea776b3f.js"
+        js_pattern = r'(5603-[a-f0-9]+\.js)'
+
         for attempt in range(retries):
             try:
                 async with ClientSession(timeout=ClientTimeout(total=60)) as session:
-                    async with session.get(url) as response:
+                    async with session.get(self.BASE_URL) as resp_index:
+                        index_text = await resp_index.text()
+
+                    match = re.search(js_pattern, index_text)
+                    if not match:
+                        return None
+
+                    js_file = match.group(1)
+                    js_url = self.BASE_URL + js_file
+                    async with session.get(js_url) as response:
                         response.raise_for_status()
                         resp_text = await response.text()
 
@@ -621,10 +635,16 @@ class AutoStaking:
                         if match:
                             return match.group(1)
 
-            except Exception:
+            except Exception as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
+                self.log(
+                    f"{Fore.GREEN + Style.BRIGHT}Base API Url   : {Style.RESET_ALL}"
+                    f"{Fore.RED + Style.BRIGHT}Fetch Pharos API Url Failed{Style.RESET_ALL}"
+                    f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}"
+                    f"{Fore.YELLOW + Style.BRIGHT}{str(e)}{Style.RESET_ALL}"
+                )
                 return None
     
     async def check_connection(self, proxy_url=None):
@@ -718,78 +738,71 @@ class AutoStaking:
                     explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
 
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
                         f"{Fore.GREEN+Style.BRIGHT} Success {Style.RESET_ALL}"
                     )
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}    Block   :{Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT}   Block   :{Style.RESET_ALL}"
                         f"{Fore.WHITE+Style.BRIGHT} {block_number} {Style.RESET_ALL}"
                     )
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}    Tx Hash :{Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT}   Tx Hash :{Style.RESET_ALL}"
                         f"{Fore.WHITE+Style.BRIGHT} {tx_hash} {Style.RESET_ALL}"
                     )
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}    Explorer:{Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT}   Explorer:{Style.RESET_ALL}"
                         f"{Fore.WHITE+Style.BRIGHT} {explorer} {Style.RESET_ALL}"
                     )
                 
                 else:
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
                         f"{Fore.RED+Style.BRIGHT} Perform On-Chain Failed {Style.RESET_ALL}"
                     )
             else:
                 formatted_next_claim = datetime.fromtimestamp(next_faucet_claim_time).astimezone(wib).strftime("%x %X %Z")
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
+                    f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
                     f"{Fore.YELLOW+Style.BRIGHT} Already Claimed {Style.RESET_ALL}"
                     f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
                     f"{Fore.CYAN+Style.BRIGHT} Next Claim at {Style.RESET_ALL}"
                     f"{Fore.WHITE+Style.BRIGHT}{formatted_next_claim}{Style.RESET_ALL}"
                 )
 
-    async def process_perform_staking(self, account: str, address: str, use_proxy: bool):
+    async def process_perform_staking(self, account: str, address: str, tickers: dict, use_proxy: bool):
         portfolio = await self.financial_portfolio_recommendation(address, use_proxy)
         if portfolio:
             change_tx = portfolio["data"]["changes"]
             
-            transactions = await self.generate_change_transactions(address, change_tx, use_proxy)
-            if transactions:
-                tx_hash, block_number = await self.perform_staking(account, address, transactions, use_proxy)
-                if tx_hash and block_number:
-                    explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
+            tx_hash, block_number = await self.perform_staking(account, address, tickers, change_tx, use_proxy)
+            if tx_hash and block_number:
+                explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
 
-                    self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
-                        f"{Fore.GREEN+Style.BRIGHT} Success {Style.RESET_ALL}"
-                    )
-                    self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}    Block   :{Style.RESET_ALL}"
-                        f"{Fore.WHITE+Style.BRIGHT} {block_number} {Style.RESET_ALL}"
-                    )
-                    self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}    Tx Hash :{Style.RESET_ALL}"
-                        f"{Fore.WHITE+Style.BRIGHT} {tx_hash} {Style.RESET_ALL}"
-                    )
-                    self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}    Explorer:{Style.RESET_ALL}"
-                        f"{Fore.WHITE+Style.BRIGHT} {explorer} {Style.RESET_ALL}"
-                    )
-                
-                else:
-                    self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
-                        f"{Fore.RED+Style.BRIGHT} Perform On-Chain Failed {Style.RESET_ALL}"
-                    )
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                    f"{Fore.GREEN+Style.BRIGHT} Success {Style.RESET_ALL}                                   "
+                )
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}   Block   :{Style.RESET_ALL}"
+                    f"{Fore.WHITE+Style.BRIGHT} {block_number} {Style.RESET_ALL}"
+                )
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}   Tx Hash :{Style.RESET_ALL}"
+                    f"{Fore.WHITE+Style.BRIGHT} {tx_hash} {Style.RESET_ALL}"
+                )
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}   Explorer:{Style.RESET_ALL}"
+                    f"{Fore.WHITE+Style.BRIGHT} {explorer} {Style.RESET_ALL}"
+                )
+            
             else:
                 self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
-                    f"{Fore.RED+Style.BRIGHT} Fetch Transaction Calldata Failed {Style.RESET_ALL}"
+                    f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT} Perform On-Chain Failed {Style.RESET_ALL}"
                 )
         else:
             self.log(
-                f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
+                f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
                 f"{Fore.RED+Style.BRIGHT} Fetch Financial Portfolio Recommendation Failed {Style.RESET_ALL}"
             )
 
@@ -814,7 +827,7 @@ class AutoStaking:
 
             await self.process_perform_claim_faucet(account, address, use_proxy)
 
-            self.log(f"{Fore.CYAN+Style.BRIGHT}Staking :{Style.RESET_ALL}")
+            self.log(f"{Fore.CYAN+Style.BRIGHT}Staking :{Style.RESET_ALL}                                   ")
 
             for i in range(self.staking_count):
                 self.log(
@@ -825,60 +838,66 @@ class AutoStaking:
                     f"{Fore.WHITE+Style.BRIGHT}{self.staking_count}{Style.RESET_ALL}                                   "
                 )
 
-                self.log(f"{Fore.CYAN+Style.BRIGHT}    Balance :{Style.RESET_ALL}")
+                tickers = {
+                    "ticker0": "USDC",
+                    "ticker1": "USDT",
+                    "ticker2": "MockUSD",
+                }
+
+                self.log(f"{Fore.CYAN+Style.BRIGHT}   Balance :{Style.RESET_ALL}")
 
                 usdc_balance = await self.get_token_balance(address, self.USDC_CONTRACT_ADDRESS, use_proxy)
                 self.log(
-                    f"{Fore.MAGENTA+Style.BRIGHT}       1.{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {usdc_balance} USDC {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}      1.{Style.RESET_ALL}"
+                    f"{Fore.WHITE+Style.BRIGHT} {usdc_balance} {tickers['ticker0']} {Style.RESET_ALL}"
                 )
                 usdt_balance = await self.get_token_balance(address, self.USDT_CONTRACT_ADDRESS, use_proxy)
                 self.log(
-                    f"{Fore.MAGENTA+Style.BRIGHT}       2.{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {usdt_balance} USDT {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}      2.{Style.RESET_ALL}"
+                    f"{Fore.WHITE+Style.BRIGHT} {usdt_balance} {tickers['ticker1']} {Style.RESET_ALL}"
                 )
                 musd_balance = await self.get_token_balance(address, self.MUSD_CONTRACT_ADDRESS, use_proxy)
                 self.log(
-                    f"{Fore.MAGENTA+Style.BRIGHT}       3.{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {musd_balance} MockUSD {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}      3.{Style.RESET_ALL}"
+                    f"{Fore.WHITE+Style.BRIGHT} {musd_balance} {tickers['ticker2']} {Style.RESET_ALL}"
                 )
 
-                self.log(f"{Fore.CYAN+Style.BRIGHT}    Amount  :{Style.RESET_ALL}")
+                self.log(f"{Fore.CYAN+Style.BRIGHT}   Amount  :{Style.RESET_ALL}")
                 self.log(
-                    f"{Fore.MAGENTA+Style.BRIGHT}       1.{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {self.usdc_amount} USDC {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}      1.{Style.RESET_ALL}"
+                    f"{Fore.WHITE+Style.BRIGHT} {self.usdc_amount} {tickers['ticker0']} {Style.RESET_ALL}"
                 )
                 self.log(
-                    f"{Fore.MAGENTA+Style.BRIGHT}       2.{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {self.usdt_amount} USDT {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}      2.{Style.RESET_ALL}"
+                    f"{Fore.WHITE+Style.BRIGHT} {self.usdt_amount} {tickers['ticker1']} {Style.RESET_ALL}"
                 )
                 self.log(
-                    f"{Fore.MAGENTA+Style.BRIGHT}       3.{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {self.musd_amount} MockUSD {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}      3.{Style.RESET_ALL}"
+                    f"{Fore.WHITE+Style.BRIGHT} {self.musd_amount} {tickers['ticker2']} {Style.RESET_ALL}"
                 )
 
                 if not usdc_balance or usdc_balance <= self.usdc_amount:
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}     Status  :{Style.RESET_ALL}"
-                        f"{Fore.YELLOW+Style.BRIGHT} Insufficient USDC Token Balance {Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
+                        f"{Fore.YELLOW+Style.BRIGHT} Insufficient {tickers['ticker0']} Token Balance {Style.RESET_ALL}"
                     )
                     break
 
                 if not usdt_balance or usdt_balance <= self.usdc_amount:
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}     Status  :{Style.RESET_ALL}"
-                        f"{Fore.YELLOW+Style.BRIGHT} Insufficient USDT Token Balance {Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
+                        f"{Fore.YELLOW+Style.BRIGHT} Insufficient {tickers['ticker1']} Token Balance {Style.RESET_ALL}"
                     )
                     break
 
                 if not musd_balance or musd_balance <= self.usdc_amount:
                     self.log(
-                        f"{Fore.CYAN+Style.BRIGHT}     Status  :{Style.RESET_ALL}"
-                        f"{Fore.YELLOW+Style.BRIGHT} Insufficient MockUSD Token Balance {Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
+                        f"{Fore.YELLOW+Style.BRIGHT} Insufficient {tickers['ticker2']} Token Balance {Style.RESET_ALL}"
                     )
                     break
 
-                await self.process_perform_staking(account, address, use_proxy)
+                await self.process_perform_staking(account, address, tickers, use_proxy)
                 await self.print_timer()
             
     async def main(self):
@@ -904,12 +923,7 @@ class AutoStaking:
                     await self.load_proxies(use_proxy_choice)
 
                 base_api = await self.fetch_base_api()
-                if not base_api:
-                    self.log(
-                        f"{Fore.GREEN + Style.BRIGHT}Base API Url   : {Style.RESET_ALL}"
-                        f"{Fore.RED + Style.BRIGHT}Fetch Pharos API Url Failed{Style.RESET_ALL}"
-                    )
-                    return
+                if not base_api: return
                 
                 self.log(
                     f"{Fore.GREEN + Style.BRIGHT}Base API Url   : {Style.RESET_ALL}"
