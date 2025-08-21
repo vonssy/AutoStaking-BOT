@@ -25,7 +25,7 @@ h23cf2WfZ0vwDYzZ8QIDAQAB
 
 class AutoStaking:
     def __init__(self) -> None:
-        self.BASE_URL = "https://autostaking.pro/_next/static/chunks/"
+        self.BASE_URL = "https://autostaking.pro/"
         self.RPC_URL = "https://testnet.dplabs-internal.com/"
         self.USDC_CONTRACT_ADDRESS = "0x72df0bcd7276f2dFbAc900D1CE63c272C4BCcCED"
         self.USDT_CONTRACT_ADDRESS = "0xD4071393f8716661958F766DF660033b3d35fD29"
@@ -613,35 +613,43 @@ class AutoStaking:
         return choose, rotate
     
     async def fetch_base_api(self, retries=5):
-        js_pattern = r'(5603-[a-f0-9]+\.js)'
+        js_pattern = re.compile(r'src="([^"]+_next/static/chunks/[^"]+\.js)"')
+        api_pattern = re.compile(r'r\s*=\s*o\.Z\s*\?\s*"([^"]+)"')
 
         for attempt in range(retries):
             try:
-                async with ClientSession(timeout=ClientTimeout(total=60)) as session:
+                async with ClientSession(timeout=ClientTimeout(total=30)) as session:
                     async with session.get(self.BASE_URL) as resp_index:
                         index_text = await resp_index.text()
 
-                    match = re.search(js_pattern, index_text)
-                    if not match:
+                    js_files = js_pattern.findall(index_text)
+                    if not js_files:
                         return None
+                    
+                    for js_file in js_files:
+                        if not js_file.startswith("http"):
+                            if js_file.startswith("/"):
+                                js_url = self.BASE_URL.rstrip("/") + js_file
+                            else:
+                                js_url = self.BASE_URL.rstrip("/") + "/" + js_file
+                        else:
+                            js_url = js_file
 
-                    js_file = match.group(1)
-                    js_url = self.BASE_URL + js_file
-                    async with session.get(js_url) as response:
-                        response.raise_for_status()
-                        resp_text = await response.text()
+                        async with session.get(js_url) as response:
+                            response.raise_for_status()
+                            resp_text = await response.text()
 
-                        match = re.search(r'r\s*=\s*o\.Z\s*\?\s*"([^"]+)"', resp_text)
-                        if match:
-                            return match.group(1)
+                            match = api_pattern.search(resp_text)
+                            if match:
+                                return match.group(1)
 
             except Exception as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                self.log(
+                print(
                     f"{Fore.GREEN + Style.BRIGHT}Base API Url   : {Style.RESET_ALL}"
-                    f"{Fore.RED + Style.BRIGHT}Fetch Pharos API Url Failed{Style.RESET_ALL}"
+                    f"{Fore.RED + Style.BRIGHT}Fetch API Url Failed{Style.RESET_ALL}"
                     f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}"
                     f"{Fore.YELLOW + Style.BRIGHT}{str(e)}{Style.RESET_ALL}"
                 )
@@ -672,12 +680,11 @@ class AutoStaking:
             "Content-Length": str(len(data)),
             "Content-Type": "application/json"
         }
-        await asyncio.sleep(3)
         for attempt in range(retries):
             proxy_url = self.get_next_proxy_for_account(address) if use_proxy else None
             connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
-                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
+                async with ClientSession(connector=connector, timeout=ClientTimeout(total=120)) as session:
                     async with session.post(url=url, headers=headers, data=data, proxy=proxy, proxy_auth=proxy_auth) as response:
                         response.raise_for_status()
                         return await response.json()
@@ -696,12 +703,11 @@ class AutoStaking:
             "Content-Length": str(len(data)),
             "Content-Type": "application/json"
         }
-        await asyncio.sleep(3)
         for attempt in range(retries):
             proxy_url = self.get_next_proxy_for_account(address) if use_proxy else None
             connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
-                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
+                async with ClientSession(connector=connector, timeout=ClientTimeout(total=120)) as session:
                     async with session.post(url=url, headers=headers, data=data, proxy=proxy, proxy_auth=proxy_auth) as response:
                         response.raise_for_status()
                         return await response.json()
