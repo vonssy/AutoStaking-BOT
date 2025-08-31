@@ -614,7 +614,7 @@ class AutoStaking:
     
     async def fetch_base_api(self, retries=5):
         js_pattern = re.compile(r'src="([^"]+_next/static/chunks/[^"]+\.js)"')
-        api_pattern = re.compile(r'r\s*=\s*o\.Z\s*\?\s*"([^"]+)"')
+        api_pattern = re.compile(r'r\.Z\s*\?\s*"([^"]+)"')
 
         for attempt in range(retries):
             try:
@@ -624,8 +624,10 @@ class AutoStaking:
 
                     js_files = js_pattern.findall(index_text)
                     if not js_files:
-                        return None
+                        raise Exception("Js File Not Found")
                     
+                    found_api = None
+
                     for js_file in js_files:
                         if not js_file.startswith("http"):
                             if js_file.startswith("/"):
@@ -641,13 +643,19 @@ class AutoStaking:
 
                             match = api_pattern.search(resp_text)
                             if match:
-                                return match.group(1)
+                                found_api = match.group(1)
+                                break
 
+                    if not found_api:
+                        raise Exception("API URL Not Found")
+
+                    return found_api
+                    
             except Exception as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                print(
+                self.log(
                     f"{Fore.GREEN + Style.BRIGHT}Base API Url   : {Style.RESET_ALL}"
                     f"{Fore.RED + Style.BRIGHT}Fetch API Url Failed{Style.RESET_ALL}"
                     f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}"
