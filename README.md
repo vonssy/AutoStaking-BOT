@@ -7,13 +7,19 @@ AutoStaking BOT
 ## Features
 
   - Auto Get Account Information
-  - Auto Run With [Proxyscrape Free Proxy](https://proxyscrape.com/free-proxy-list) - `Choose 1`
-  - Auto Run With Private Proxy - `Choose 2`
-  - Auto Run Without Proxy - `Choose 3`
+  - Auto Run With Proxy - `Choose 1`
+  - Auto Run Without Proxy - `Choose 2`
   - Auto Rotate Invalid Proxies - `y` or `n`
   - Auto Claim MockUSD Faucet
   - Auto Make Staking Tx
   - Multi Accounts
+
+## Proxy Recommendation
+If you need a reliable proxy for multi-wallet automation, airdrop farming, or avoiding geo-restrictions, I recommend **Nstproxy**.  
+Affordable (from $0.1/GB), global coverage, rotation control, and anti-ban tech.
+
+🔗 [Nstproxy.com](https://www.nstproxy.com/?utm_source=vonssy) | [Telegram](https://t.me/nstproxy) | [Discord](https://discord.gg/5jjWCAmvng)  
+👉 Use code **VONSSY** to get **10% OFF**
 
 ## Requiremnets
 
