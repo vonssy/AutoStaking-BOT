@@ -111,7 +111,7 @@ Run the bot using one of the following commands:
 
 ```bash
 python bot.py
-# or
+# or for Python 3 specifically
 python3 bot.py
 ```
 
@@ -129,8 +129,8 @@ When starting the bot, you'll be prompted to choose:
 
 ## 🌐 Proxy Recommendation
 
-<div align="center">
-  <img src="images/banner.png" alt="NST Proxy Banner" width="600">
+<div align="left">
+  <img src="images/banner.png" alt="NST Proxy Banner" width="100">
 </div>
 
 For reliable multi-wallet automation and geo-restriction bypass, we recommend **Nstproxy**:
