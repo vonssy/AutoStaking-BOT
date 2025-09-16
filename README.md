@@ -130,7 +130,7 @@ When starting the bot, you'll be prompted to choose:
 ## 🌐 Proxy Recommendation
 
 <div align="left">
-  <img src="images/banner.png" alt="NST Proxy Banner" width="100">
+  <img src="images/banner.png" alt="NST Proxy Banner" width="300">
 </div>
 
 For reliable multi-wallet automation and geo-restriction bypass, we recommend **Nstproxy**:
