@@ -603,7 +603,10 @@ class AutoStaking:
     
     async def fetch_base_api(self, retries=5):
         js_pattern = re.compile(r'src="([^"]+_next/static/chunks/[^"]+\.js)"')
-        api_pattern = re.compile(r'r\.Z\s*\?\s*"([^"]+)"')
+        api_patterns = [
+            re.compile(r'o\.Z\s*\?\s*"([^"]+)"'), 
+            re.compile(r'r\.Z\s*\?\s*"([^"]+)"')
+        ]
 
         for attempt in range(retries):
             try:
@@ -630,10 +633,11 @@ class AutoStaking:
                             response.raise_for_status()
                             resp_text = await response.text()
 
-                            match = api_pattern.search(resp_text)
-                            if match:
-                                found_api = match.group(1)
-                                break
+                            for pattern in api_patterns:
+                                match = pattern.search(resp_text)
+                                if match:
+                                    found_api = match.group(1)
+                                    break
 
                     if not found_api:
                         raise Exception("API URL Not Found")
