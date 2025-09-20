@@ -454,7 +454,7 @@ class AutoStaking:
             if not transactions: 
                 raise Exception("Fetch Transaction Calldata Failed")
                 
-            calldata = transactions["data"]["688688"]["data"]
+            calldata = transactions["data"]["688688-0x11cD3700B310339003641Fdce57c1f9BD21aE015"]["data"]
 
             estimated_gas = web3.eth.estimate_gas({
                 "from": web3.to_checksum_address(address),
@@ -883,21 +883,42 @@ class AutoStaking:
                     f"{Fore.WHITE+Style.BRIGHT} {self.musd_amount} {tickers['ticker2']} {Style.RESET_ALL}"
                 )
 
-                if not usdc_balance or usdc_balance <= self.usdc_amount:
+                if usdc_balance is None:
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
+                        f"{Fore.RED+Style.BRIGHT} Fetch {tickers['ticker0']} Token Balance Failed {Style.RESET_ALL}"
+                    )
+                    continue
+
+                if usdt_balance is None:
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
+                        f"{Fore.RED+Style.BRIGHT} Fetch {tickers['ticker1']} Token Balance Failed {Style.RESET_ALL}"
+                    )
+                    continue
+
+                if musd_balance is None:
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
+                        f"{Fore.RED+Style.BRIGHT} Fetch {tickers['ticker2']} Token Balance Failed {Style.RESET_ALL}"
+                    )
+                    continue
+
+                if usdc_balance < self.usdc_amount:
                     self.log(
                         f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
                         f"{Fore.YELLOW+Style.BRIGHT} Insufficient {tickers['ticker0']} Token Balance {Style.RESET_ALL}"
                     )
                     break
 
-                if not usdt_balance or usdt_balance <= self.usdc_amount:
+                if usdt_balance < self.usdt_amount:
                     self.log(
                         f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
                         f"{Fore.YELLOW+Style.BRIGHT} Insufficient {tickers['ticker1']} Token Balance {Style.RESET_ALL}"
                     )
                     break
 
-                if not musd_balance or musd_balance <= self.usdc_amount:
+                if musd_balance < self.musd_amount:
                     self.log(
                         f"{Fore.CYAN+Style.BRIGHT}    Status  :{Style.RESET_ALL}"
                         f"{Fore.YELLOW+Style.BRIGHT} Insufficient {tickers['ticker2']} Token Balance {Style.RESET_ALL}"
@@ -915,8 +936,6 @@ class AutoStaking:
             proxy_choice, rotate_proxy = self.print_question()
 
             while True:
-                use_proxy = True if proxy_choice == 1 else False
-
                 self.clear_terminal()
                 self.welcome()
                 self.log(
@@ -924,6 +943,7 @@ class AutoStaking:
                     f"{Fore.WHITE + Style.BRIGHT}{len(accounts)}{Style.RESET_ALL}"
                 )
 
+                use_proxy = True if proxy_choice == 1 else False
                 if use_proxy:
                     await self.load_proxies()
 
